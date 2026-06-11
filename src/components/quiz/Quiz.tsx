@@ -17,14 +17,13 @@ import {
   MessageCircle,
   Sparkles,
 } from "lucide-react";
+import { QUESTIONS, type Answers, type Question } from "@/lib/quiz";
 import {
-  QUESTIONS,
-  type Answers,
-  type Question,
-  computeAreas,
-  isQualified,
-  isPriority,
-} from "@/lib/quiz";
+  computeAree,
+  isQualificato,
+  isPriorityLead,
+  toCanonicalAnswers,
+} from "@/lib/qualificazione";
 
 type Step = "question" | "contacts" | "thanks";
 
@@ -37,6 +36,7 @@ const contactSchema = z.object({
   name: z.string().min(2, "Inserisci nome e cognome"),
   email: z.string().email("Inserisci un indirizzo email valido"),
   phone: z.string().min(6, "Inserisci un numero di telefono valido"),
+  website: z.string().optional(), // honeypot
   privacy: z.boolean().refine((v) => v === true, {
     message: "Devi accettare la privacy policy",
   }),
@@ -68,7 +68,13 @@ export function Quiz({ onClose }: { onClose?: () => void }) {
 
   const advance = () => {
     if (qi < total - 1) setQi((n) => n + 1);
-    else setStep("contacts");
+    else {
+      // fine domanda 8 → evento custom QuizComplete
+      if (typeof window !== "undefined" && (window as { fbq?: (...a: unknown[]) => void }).fbq) {
+        (window as { fbq?: (...a: unknown[]) => void }).fbq!("trackCustom", "QuizComplete");
+      }
+      setStep("contacts");
+    }
   };
 
   const back = () => {
@@ -269,7 +275,9 @@ function Contacts({
   answers: Answers;
   onDone: () => void;
 }) {
-  const areas = computeAreas(answers);
+  const aree = computeAree(answers);
+  const n = aree.length;
+  const [submitError, setSubmitError] = useState(false);
 
   const {
     register,
@@ -277,17 +285,29 @@ function Contacts({
     formState: { errors, isSubmitting },
   } = useForm<ContactData>({ resolver: zodResolver(contactSchema) });
 
-  const onSubmit = async (data: ContactData) => {
+  const onSubmit = async (data: ContactData & { website?: string }) => {
+    setSubmitError(false);
+
+    // UTM letti dalla sessione (salvati al primo load — vedi useUtmCapture)
+    let utm: Record<string, string> = {};
+    try {
+      utm = JSON.parse(sessionStorage.getItem("quiz_utm") || "{}");
+    } catch {
+      utm = {};
+    }
+
     const payload = {
       name: data.name,
       email: data.email,
       phone: data.phone,
-      answers,
-      areas: areas.map((a) => ({ key: a.key, txt: a.txt })),
-      qualified: isQualified(answers),
-      priority: isPriority(answers),
-      patrimonyBand: answers.q4 ?? "",
-      timestamp: new Date().toISOString(),
+      website: data.website || "", // honeypot (deve restare vuoto)
+      answers: toCanonicalAnswers(answers),
+      areas: aree,
+      qualified: isQualificato(answers),
+      priority: isPriorityLead(answers),
+      patrimonyBand: toCanonicalAnswers(answers).q4,
+      utm,
+      submittedAt: new Date().toISOString(),
     };
 
     try {
@@ -305,38 +325,52 @@ function Contacts({
       onDone();
     } catch (err) {
       console.error("Errore invio quiz:", err);
-      alert("Si è verificato un errore. Riprova più tardi.");
+      setSubmitError(true); // mostra messaggio, mantiene le risposte
     }
   };
 
   return (
     <Card>
       <Eyebrow>Ci siamo</Eyebrow>
-      <h2 className="text-2xl sm:text-[26px] font-bold text-white leading-snug mb-3">
-        Abbiamo trovato {areas.length} punti su cui i tuoi soldi potrebbero
-        lavorare meglio.
-      </h2>
-      <p className="text-gray-300 mb-6 leading-relaxed">
-        Ti prepariamo un report gratuito e personalizzato: per ogni punto ti
-        spieghiamo, in parole semplici, cosa ti sta costando oggi e da dove
-        conviene ripartire. Te lo mandiamo via email.
-      </p>
+      {n > 0 ? (
+        <>
+          <h2 className="text-2xl sm:text-[26px] font-bold text-white leading-snug mb-3">
+            Abbiamo individuato {n} {n === 1 ? "area" : "aree"} da approfondire nel
+            tuo profilo.
+          </h2>
+          <p className="text-gray-300 mb-6 leading-relaxed">
+            Ti prepariamo un report gratuito e personalizzato: per ogni area ti
+            spieghiamo, in parole semplici, cosa ti sta costando oggi e da dove
+            conviene ripartire. Te lo mandiamo via email.
+          </p>
 
-      {/* Punti bloccati (teaser) */}
-      <div className="flex flex-col gap-2.5 mb-7">
-        {areas.map((a) => (
-          <div
-            key={a.key}
-            className="flex items-center gap-3 rounded-xl bg-white/[0.04] border border-[var(--gold-400)]/15 px-4 py-3"
-          >
-            <span className="flex-none w-2 h-2 rounded-full bg-[var(--gold-400)]" />
-            <span className="text-[14.5px] text-gray-100">{a.txt}</span>
-            <span className="ml-auto flex items-center gap-1.5 text-xs text-gray-400">
-              <Lock className="w-3.5 h-3.5" /> nel report
-            </span>
+          <div className="flex flex-col gap-2.5 mb-7">
+            {aree.map((a) => (
+              <div
+                key={a.key}
+                className="flex items-center gap-3 rounded-xl bg-white/[0.04] border border-[var(--gold-400)]/15 px-4 py-3"
+              >
+                <span className="flex-none w-2 h-2 rounded-full bg-[var(--gold-400)]" />
+                <span className="text-[14.5px] text-gray-100">{a.txt}</span>
+                <span className="ml-auto flex items-center gap-1.5 text-xs text-gray-400">
+                  <Lock className="w-3.5 h-3.5" /> nel report
+                </span>
+              </div>
+            ))}
           </div>
-        ))}
-      </div>
+        </>
+      ) : (
+        <>
+          <h2 className="text-2xl sm:text-[26px] font-bold text-white leading-snug mb-3">
+            Il tuo quadro appare solido.
+          </h2>
+          <p className="text-gray-300 mb-7 leading-relaxed">
+            Dalle tue risposte non emergono criticità evidenti — un buon segnale.
+            Lascia la tua email: ti inviamo comunque il report con la nostra analisi
+            e qualche spunto per mantenere il tuo patrimonio efficiente nel tempo.
+          </p>
+        </>
+      )}
 
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
         <Field label="Nome e Cognome *" error={errors.name?.message}>
@@ -365,6 +399,16 @@ function Contacts({
           />
         </Field>
 
+        {/* Honeypot anti-spam: nascosto agli utenti, riempito solo dai bot */}
+        <input
+          {...register("website")}
+          type="text"
+          tabIndex={-1}
+          autoComplete="off"
+          aria-hidden="true"
+          className="absolute left-[-9999px] w-px h-px opacity-0"
+        />
+
         <label className="flex items-start gap-3 text-sm text-gray-300">
           <input
             {...register("privacy")}
@@ -389,6 +433,13 @@ function Contacts({
         <Button type="submit" size="lg" className="btn-glow w-full" disabled={isSubmitting}>
           {isSubmitting ? "Invio in corso..." : "Mostrami i risultati"}
         </Button>
+
+        {submitError && (
+          <p className="text-sm text-[#e3937e] flex items-center gap-1.5">
+            <AlertCircle className="w-4 h-4" />
+            Qualcosa è andato storto, riprova.
+          </p>
+        )}
       </form>
 
       <p className="flex items-center gap-2 text-xs text-gray-400 mt-4">
@@ -428,7 +479,7 @@ function Field({
 /* ---------- Thanks (differenziato per fascia) ---------- */
 
 function Thanks({ answers }: { answers: Answers }) {
-  const qualified = isQualified(answers);
+  const qualified = isQualificato(answers);
   const waText = encodeURIComponent(
     "Ciao! Ho appena completato il check-up sul vostro sito e vorrei capire come far rendere meglio i miei risparmi."
   );
