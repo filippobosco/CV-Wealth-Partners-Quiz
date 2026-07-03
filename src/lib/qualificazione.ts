@@ -69,56 +69,70 @@ export function toCanonicalAnswers(answers: Answers): CanonicalAnswers {
 }
 
 /* -------------------------------------------------------------------------- */
-/* Macro-aree (4) — operano sui codici CANONICI                               */
+/* Aree di scopertura (6) — logica allineata al motore report n8n             */
+/* Mappatura 1-a-1 (ogni area = una sola domanda), de-dup liquidità,          */
+/* priorità e cap a 3. Vedi documento "mini-report", sezioni 2/3/4.           */
 /* -------------------------------------------------------------------------- */
 
-export type MacroAreaKey = "metodo" | "costi" | "protezione" | "liquidita";
+export type MacroAreaKey =
+  | "strategia"
+  | "costi"
+  | "liquidita"
+  | "protezione"
+  | "solitudine"
+  | "metodo";
 
 export interface MacroArea {
   key: MacroAreaKey;
   txt: string;
 }
 
-const AREE_DEFS: Array<{
-  key: MacroAreaKey;
-  txt: string;
-  hit: (a: CanonicalAnswers) => boolean;
-}> = [
-  {
-    key: "metodo",
-    txt: "Strategia e obiettivi di vita",
-    hit: (a) =>
-      ["solo", "fermo"].includes(a.q1) ||
-      a.q2 !== "si_punto_di_partenza" ||
-      a.q7 !== "sereno",
-  },
-  {
-    key: "costi",
-    txt: "Costi e fiscalità sotto controllo",
-    hit: (a) => ["approssimativa", "mai_calcolato"].includes(a.q5),
-  },
-  {
-    key: "protezione",
-    txt: "Protezione del patrimonio e della famiglia",
-    hit: (a) => ["pensato_nulla", "mai_affrontato"].includes(a.q6),
-  },
-  {
-    key: "liquidita",
-    txt: "Liquidità ferma che non lavora",
-    hit: (a) => ["si", "in_parte"].includes(a.q8),
-  },
+// Titoli mostrati all'utente nella schermata finale (teaser "bloccati")
+const AREA_TXT: Record<MacroAreaKey, string> = {
+  strategia: "Strategia non legata agli obiettivi",
+  costi: "Costi e fiscalità non sotto controllo",
+  liquidita: "Liquidità ferma che non lavora",
+  protezione: "Patrimonio e famiglia non protetti",
+  solitudine: "Gestione in solitudine",
+  metodo: "Investire senza un metodo",
+};
+
+// Ordine di priorità (sezione 3 del documento): usato per il cap a 3.
+const PRIORITA: MacroAreaKey[] = [
+  "strategia",
+  "costi",
+  "liquidita",
+  "protezione",
+  "solitudine",
+  "metodo",
 ];
 
 /**
- * Restituisce le macro-aree attivate (max 4) a partire dalle risposte interne.
+ * Aree attive secondo la mappatura 1-a-1 del documento, con de-dup liquidità
+ * e cap a 3 per priorità. Coincide con `aree_mostrate` del motore n8n, così
+ * il numero visto dall'utente = numero di aree nel report ricevuto.
  * N può essere 0: la gate gestisce quel caso con messaggio positivo.
  */
 export function computeAree(answers: Answers): MacroArea[] {
-  const canonical = toCanonicalAnswers(answers);
-  return AREE_DEFS.filter((a) => a.hit(canonical)).map((a) => ({
-    key: a.key,
-    txt: a.txt,
-  }));
+  const a = toCanonicalAnswers(answers);
+
+  const attiva: Record<MacroAreaKey, boolean> = {
+    strategia: a.q2 !== "si_punto_di_partenza",
+    costi: ["approssimativa", "mai_calcolato"].includes(a.q5),
+    liquidita: ["si", "in_parte"].includes(a.q8),
+    protezione: ["pensato_nulla", "mai_affrontato"].includes(a.q6),
+    solitudine: a.q7 !== "sereno",
+    metodo: ["solo", "fermo"].includes(a.q1),
+  };
+
+  // De-dup liquidità: se metodo="fermo" e liquidità è attiva, tieni solo liquidità.
+  if (attiva.metodo && a.q1 === "fermo" && attiva.liquidita) {
+    attiva.metodo = false;
+  }
+
+  return PRIORITA.filter((k) => attiva[k])
+    .slice(0, 3)
+    .map((k) => ({ key: k, txt: AREA_TXT[k] }));
 }
 
 /* -------------------------------------------------------------------------- */
