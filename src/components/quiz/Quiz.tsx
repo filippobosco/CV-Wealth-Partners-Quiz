@@ -51,7 +51,21 @@ export function Quiz({ onClose }: { onClose?: () => void }) {
 
   const total = QUESTIONS.length;
 
+  const advance = () => {
+    setQi((n) => {
+      if (n < total - 1) return n + 1;
+      // già all'ultima domanda → vai ai contatti (fine quiz)
+      if (typeof window !== "undefined" && (window as { fbq?: (...a: unknown[]) => void }).fbq) {
+        (window as { fbq?: (...a: unknown[]) => void }).fbq!("trackCustom", "QuizComplete");
+      }
+      setStep("contacts");
+      return n;
+    });
+  };
+
   const setSingle = (q: Question, value: string) => {
+    // registra la risposta e avanza solo DOPO che lo stato è stato applicato,
+    // così nessuna risposta può andare persa per timing/re-render
     setAnswers((prev) => ({ ...prev, [q.id]: value }));
     window.setTimeout(advance, 280);
   };
@@ -64,17 +78,6 @@ export function Quiz({ onClose }: { onClose?: () => void }) {
       else cur.push(value);
       return { ...prev, [q.id]: cur };
     });
-  };
-
-  const advance = () => {
-    if (qi < total - 1) setQi((n) => n + 1);
-    else {
-      // fine domanda 8 → evento custom QuizComplete
-      if (typeof window !== "undefined" && (window as { fbq?: (...a: unknown[]) => void }).fbq) {
-        (window as { fbq?: (...a: unknown[]) => void }).fbq!("trackCustom", "QuizComplete");
-      }
-      setStep("contacts");
-    }
   };
 
   const back = () => {
