@@ -1,6 +1,5 @@
 "use client";
 
-import { motion } from "framer-motion";
 import { Container } from "@/components/ui/Container";
 import { Button } from "@/components/ui/Button";
 import { TrendingDown, ShieldCheck, Sparkles, ArrowRight } from "lucide-react";
@@ -21,12 +20,9 @@ export function Presentation({ onStart }: { onStart: () => void }) {
       <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-[var(--gold-500)] to-transparent pointer-events-none" />
 
       <Container size="lg" className="relative z-10">
-        <motion.div
-          initial={{ opacity: 0, y: 24 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.6 }}
-          className="max-w-3xl mx-auto text-center"
-        >
+        {/* Nessuna animazione d'ingresso: l'hero è l'LCP e deve essere
+            visibile subito (con opacity:0 iniziale l'LCP mobile era ~7s) */}
+        <div className="max-w-3xl mx-auto text-center">
           <h1 className="text-[1.95rem] sm:text-[2.75rem] lg:text-5xl xl:text-[3.25rem] font-bold text-white leading-[1.15] mb-6">
             I tuoi soldi sono fermi.
             <br />
@@ -53,7 +49,7 @@ export function Presentation({ onStart }: { onStart: () => void }) {
             <Feature icon={ShieldCheck} text="Gratuito e riservato" />
             <Feature icon={TrendingDown} text="Scopri cosa ti sta costando l'attesa" />
           </div>
-        </motion.div>
+        </div>
       </Container>
     </section>
   );

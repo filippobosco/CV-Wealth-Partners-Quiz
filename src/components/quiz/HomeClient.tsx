@@ -10,7 +10,13 @@ import { Footer } from "@/components/sections/Footer";
 
 export function HomeClient() {
   const [open, setOpen] = useState(false);
-  const start = () => setOpen(true);
+  const start = () => {
+    setOpen(true);
+    // evento custom: quiz aperto (per misurare l'anello landing → quiz)
+    if (typeof window !== "undefined" && (window as { fbq?: (...a: unknown[]) => void }).fbq) {
+      (window as { fbq?: (...a: unknown[]) => void }).fbq!("trackCustom", "QuizStart");
+    }
+  };
 
   // Cattura UTM dai query param al primo caricamento e li salva in sessione,
   // così sopravvivono fino al submit del quiz.
